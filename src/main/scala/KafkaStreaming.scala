@@ -11,7 +11,7 @@ import org.apache.spark.SparkConf
 object KafkaStreaming {
 
   def main(args: Array[String]): Unit = {
-
+//    System.setProperty("hadoop.home.dir", "hadoop-2.7.1")
     val kafkaParams = Map[String, Object](
       "bootstrap.servers" -> "localhost:9092",
       "key.deserializer" -> classOf[StringDeserializer],
