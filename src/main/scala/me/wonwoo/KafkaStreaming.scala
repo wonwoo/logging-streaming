@@ -1,15 +1,17 @@
 package me.wonwoo
 
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.spark.HBaseContext
+import org.apache.hadoop.hbase.client.{ConnectionFactory, HBaseAdmin, Put}
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.apache.spark.streaming.kafka010._
-import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
+import org.apache.spark.rdd.RDD
+
+import scala.util.Properties
 
 
 object KafkaStreaming {
@@ -46,50 +48,25 @@ object KafkaStreaming {
     //        println(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}" )
     //      }
     //    }
-    def catalog =
-    s"""{
-       |"table":{"namespace":"default", "name":"table1"},
-       |"rowkey":"key",
-       |"columns":{
-       |"col0":{"cf":"rowkey", "col":"key", "type":"int"},
-       |"col1":{"cf":"cf1", "col":"col1", "type":"int"},
-       |"col2":{"cf":"cf2", "col":"col2", "type":"boolean"}
-       |}
-       |}""".stripMargin
-
 
     //TODO where data save ?
     val map = stream.map(record => (record.key, record.value))
+    val conf = HBaseConfiguration.create
 
-    val rdd = sc.parallelize(Array(
-      (Bytes.toBytes("1"),
-        Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("1")))),
-      (Bytes.toBytes("2"),
-        Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("2")))),
-      (Bytes.toBytes("3"),
-        Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("3")))),
-      (Bytes.toBytes("4"),
-        Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("4")))),
-      (Bytes.toBytes("5"),
-        Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("5"))))
-    ))
+    val ZOOKEEPER_QUORUM = "127.0.0.1"
+    conf.set("hbase.zookeeper.quorum", ZOOKEEPER_QUORUM)
 
-    val conf = HBaseConfiguration.create()
-    val hbaseContext = new HBaseContext(sc, conf)
-    hbaseContext.bulkPut[(Array[Byte], Array[(Array[Byte], Array[Byte], Array[Byte])])](rdd,
-      TableName.valueOf(tableName),
-      (putRecord) => {
-        val put = new Put(putRecord._1)
-        putRecord._2.foreach((putValue) =>
-          put.addColumn(putValue._1, putValue._2, putValue._3))
-        put
-      })
-
+    val connection = ConnectionFactory.createConnection(conf)
+    val table = connection.getTable(TableName.valueOf(Bytes.toBytes(tableName)))
+    map.foreachRDD((value: RDD[(String, String)], time: Time) => {
+      var put = new Put(Bytes.toBytes("row1"))
+      put.addColumn(Bytes.toBytes("d"), Bytes.toBytes("test_column_name"), Bytes.toBytes("test_value"))
+      table.put(put)
+    })
     ssc.start
     ssc.awaitTermination
   }
 
-  case class Record(col0: Int, col1: Int, col2: Boolean)
 
   //    sc.parallelize(map).toDF.write.options(
   //      Map(HBaseTableCatalog.tableCatalog -> catalog, HBaseTableCatalog.newTable -> "5"))
